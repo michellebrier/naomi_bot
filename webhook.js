@@ -2,9 +2,10 @@
 
 require('dotenv').config()
 
-var APIAI_TOKEN = process.env.APIAI_TOKEN;
-var PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-var WEATHER_API_KEY = process.env.WEATHER_API_KEY;
+const APIAI_TOKEN = process.env.APIAI_TOKEN;
+const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
+const FB_VALIDATION_TOKEN = process.env.FB_VALIDATION_TOKEN;
 
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -22,7 +23,7 @@ const server = app.listen(process.env.PORT || 5000, () => {
 
 /* For Facebook Validation */
 app.get('/webhook', (req, res) => {
-  if (req.query['hub.mode'] && req.query['hub.verify_token'] === 'meech') {
+  if (req.query['hub.mode'] && req.query['hub.verify_token'] === FB_VALIDATION_TOKEN) {
     res.status(200).send(req.query['hub.challenge']);
   } else {
     res.status(403).end();
@@ -49,7 +50,7 @@ function sendMessage(event) {
   let text = event.message.text;
 
   let apiai = apiaiApp.textRequest(text, {
-    sessionId: 'poisson_cat' // use any arbitrary id
+    sessionId: 'poisson_cat'
   });
 
   apiai.on('response', (response) => {
