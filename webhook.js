@@ -6,12 +6,15 @@ const APIAI_TOKEN = process.env.APIAI_TOKEN;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
 const FB_VALIDATION_TOKEN = process.env.FB_VALIDATION_TOKEN;
+const YELP_TOKEN = process.env.YELP_TOKEN;
 
 const express = require('express');
 const bodyParser = require('body-parser');
 const request = require('request');
 const apiai = require('apiai');
 const apiaiApp = apiai(APIAI_TOKEN);
+const yelp = require('yelp-fusion');
+const yelpClient = yelp.client(YELP_TOKEN);
 
 const app = express();
 app.use(bodyParser.json());
@@ -31,54 +34,54 @@ app.get('/webhook', (req, res) => {
 });
 
 /* Handling all messenges */
-app.post('/webhook', (req, res) => {
-  console.log(req.body);
-  if (req.body.object === 'page') {
-    req.body.entry.forEach((entry) => {
-      entry.messaging.forEach((event) => {
-        if (event.message && event.message.text) {
-          sendMessage(event);
-        }
-      });
-    });
-    res.status(200).end();
-  }
-});
+// app.post('/webhook', (req, res) => {
+//   console.log(req.body);
+//   if (req.body.object === 'page') {
+//     req.body.entry.forEach((entry) => {
+//       entry.messaging.forEach((event) => {
+//         if (event.message && event.message.text) {
+//           sendMessage(event);
+//         }
+//       });
+//     });
+//     res.status(200).end();
+//   }
+// });
 
-function sendMessage(event) {
-  let sender = event.sender.id;
-  let text = event.message.text;
+// function sendMessage(event) {
+//   let sender = event.sender.id;
+//   let text = event.message.text;
 
-  let apiai = apiaiApp.textRequest(text, {
-    sessionId: 'poisson_cat'
-  });
+//   let apiai = apiaiApp.textRequest(text, {
+//     sessionId: 'poisson_cat'
+//   });
 
-  apiai.on('response', (response) => {
-    let aiText = response.result.fulfillment.speech;
+//   apiai.on('response', (response) => {
+//     let aiText = response.result.fulfillment.speech;
 
-    request({
-      url: 'https://graph.facebook.com/v2.6/me/messages',
-      qs: {access_token: PAGE_ACCESS_TOKEN},
-      method: 'POST',
-      json: {
-        recipient: {id: sender},
-        message: {text: aiText}
-      }
-    }, (error, response) => {
-      if (error) {
-          console.log('Error sending message: ', error);
-      } else if (response.body.error) {
-          console.log('Error: ', response.body.error);
-      }
-    });
-  });
+//     request({
+//       url: 'https://graph.facebook.com/v2.6/me/messages',
+//       qs: {access_token: PAGE_ACCESS_TOKEN},
+//       method: 'POST',
+//       json: {
+//         recipient: {id: sender},
+//         message: {text: aiText}
+//       }
+//     }, (error, response) => {
+//       if (error) {
+//           console.log('Error sending message: ', error);
+//       } else if (response.body.error) {
+//           console.log('Error: ', response.body.error);
+//       }
+//     });
+//   });
 
-  apiai.on('error', (error) => {
-    console.log(error);
-  });
+//   apiai.on('error', (error) => {
+//     console.log(error);
+//   });
 
-  apiai.end();
-}
+//   apiai.end();
+// }
 
 app.post('/ai', (req, res) => {
   if (req.body.queryResult.action === 'weather') {
@@ -105,6 +108,63 @@ app.post('/ai', (req, res) => {
         });
       }
     })
+  } else if (req.body.queryResult.action === 'discover') {
+  	console.log("QUERY RESULT ========================");
+  	console.log(req.body.queryResult);
+
+  	let term = req.body.queryResult.parameters['any'];
+  	let location_address = req.body.queryResult.parameters['location']['street-address'];
+  	let location_city = req.body.queryResult.parameters['location']['city'];
+  	let location_state = req.body.queryResult.parameters['location']['admin-area'];
+  	let location = location_address + ', ' + location_city + ', ' + location_state
+
+  	yelpClient.search({
+  		term: term,
+  		location: location,
+  		open_now: true
+  	}).then(response => {
+  		let json = response.jsonBody;
+  		let min_index = Math.min(json.businesses.length, 5);
+
+  		let richResponses = []
+
+  		for (var i = 0; i < min_index; i++) {
+  			let business = json.businesses[i];
+  			let subtitle = ""
+	  		if ('price' in business && business.price != "") {
+	  			subtitle += business.price + " - "
+	  		}
+	  		if ('distance' in business && business.distance != "") {
+	  			subtitle += (business.distance / 1609.344).toPrecision(2) + " mi - "
+	  		}
+	  		subtitle += business.review_count + " reviews"
+
+	  		let obj = {
+	  			"card": {
+	  				"title": business.name + " (" + business.rating + " stars)",
+		  			"subtitle": subtitle,
+		  			"imageUri": business.image_url,
+		  			"buttons": [{
+		  				"text": "View details",
+		  				"postback": business.url
+		  			}]
+	  			}
+	  		}
+
+	  		richResponses.push(obj);
+  		}
+
+  		console.log("RICH RESPONSES START -----------------------");
+  		console.log(richResponses);
+  		console.log("RICH RESPONSES END -----------------------");
+
+  		return res.json({
+  			fulfillmentMessages: richResponses,
+  			source: 'discover'
+  		});
+  	}).catch(e => {
+  		console.log(e);
+  	});
   }
 });
 
