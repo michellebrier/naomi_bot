@@ -83,88 +83,105 @@ app.get('/webhook', (req, res) => {
 //   apiai.end();
 // }
 
+var yelp_term = ""
+var yelp_num = ""
+
 app.post('/ai', (req, res) => {
-  if (req.body.queryResult.action === 'weather') {
-    let city = req.body.queryResult.parameters['geo-city'];
-    let restUrl = 'http://api.openweathermap.org/data/2.5/weather?APPID='+WEATHER_API_KEY+'&q='+city;
+	if (req.body.queryResult.action === 'weather') {
+	  	let city = req.body.queryResult.parameters['geo-city'];
+	    let restUrl = 'http://api.openweathermap.org/data/2.5/weather?APPID='+WEATHER_API_KEY+'&q='+city;
 
-    request.get(restUrl, (err, response, body) => {
-      if (!err && response.statusCode == 200) {
-        let json = JSON.parse(body);
-        let tempF = ~~(json.main.temp * 9/5 - 459.67);
-        let tempC = ~~(json.main.temp - 273.15);
-        let msg = 'The current condition in ' + json.name + ' is ' + json.weather[0].description + ' and the temperature is ' + tempF + ' ℉ (' +tempC+ ' ℃).'
-        return res.json({
-          fulfillmentText: msg,
-          source: 'weather'
-        });
-      } else {
-        let errorMessage = 'I failed to look up the city name.';
-        return res.status(400).json({
-          status: {
-            code: 400,
-            errorType: errorMessage
-          }
-        });
-      }
-    })
-  } else if (req.body.queryResult.action === 'discover') {
-  	console.log("QUERY RESULT ========================");
-  	console.log(req.body.queryResult);
+	    request.get(restUrl, (err, response, body) => {
+			if (!err && response.statusCode == 200) {
+			    let json = JSON.parse(body);
+			    let tempF = ~~(json.main.temp * 9/5 - 459.67);
+			    let tempC = ~~(json.main.temp - 273.15);
+			    let msg = 'The current condition in ' + json.name + ' is ' + json.weather[0].description + ' and the temperature is ' + tempF + ' ℉ (' +tempC+ ' ℃).'
+			    return res.json({
+			      fulfillmentText: msg,
+			      source: 'weather'
+			    });
+			} else {
+			    let errorMessage = 'I failed to look up the city name.';
+			    return res.status(400).json({
+			      status: {
+			        code: 400,
+			        errorType: errorMessage
+			      }
+			    });
+			}
+	    })
+	} else if (req.body.queryResult.action === 'request_location') {
+		yelp_term = req.body.queryResult.parameters['any'];
+		if ('number' in req.body.queryResult.parameters) {
+			yelp_num = req.body.queryResult.parameters['number'];
+		}
+	} else if (req.body.queryResult.action === 'discover' || req.body.queryResult.queryText === 'FACEBOOK_LOCATION') {
+		var term;
+		var num_responses;
+		var searchJson = {};
+		if (req.body.queryResult.action === 'discover') {
+			term = req.body.queryResult.parameters['any'];
+		  	let location_address = req.body.queryResult.parameters['location']['street-address'];
+		  	let location_city = req.body.queryResult.parameters['location']['city'];
+		  	let location_state = req.body.queryResult.parameters['location']['admin-area'];
+		  	let location = location_address + ', ' + location_city + ', ' + location_state
+		  	num_responses = req.body.queryResult.parameters['number'] === "" ? 5 : req.body.queryResult.parameters['number'];
+		  	searchJson = {
+		  		term: term,
+		  		location: location,
+		  		open_now: true
+		  	}
+		} else {
+			term = yelp_term;
+			let lat = req.body.originalDetectIntentRequest.payload.data.postback.data.lat;
+		  	let long = req.body.originalDetectIntentRequest.payload.data.postback.data.long;
+		  	num_responses = yelp_num === "" ? 5 : yelp_num;
+		  	searchJson = {
+				term: term,
+		  		latitude: lat,
+		  		longitude: long,
+		  		open_now: true
+			}
+		}
 
-  	let term = req.body.queryResult.parameters['any'];
-  	let location_address = req.body.queryResult.parameters['location']['street-address'];
-  	let location_city = req.body.queryResult.parameters['location']['city'];
-  	let location_state = req.body.queryResult.parameters['location']['admin-area'];
-  	let location = location_address + ', ' + location_city + ', ' + location_state
+	  	yelpClient.search(searchJson).then(response => {
+	  		let json = response.jsonBody;
+	  		let min_index = Math.min(json.businesses.length, num_responses);
 
-  	yelpClient.search({
-  		term: term,
-  		location: location,
-  		open_now: true
-  	}).then(response => {
-  		let json = response.jsonBody;
-  		let min_index = Math.min(json.businesses.length, 5);
+	  		let richResponses = []
 
-  		let richResponses = []
+	  		for (var i = 0; i < min_index; i++) {
+	  			let business = json.businesses[i];
+	  			let subtitle = ""
+		  		if ('price' in business && business.price != "") {
+		  			subtitle += business.price + " - "
+		  		}
+		  		if ('distance' in business && business.distance != "") {
+		  			subtitle += (business.distance / 1609.344).toPrecision(2) + " mi - "
+		  		}
+		  		subtitle += business.review_count + " reviews"
 
-  		for (var i = 0; i < min_index; i++) {
-  			let business = json.businesses[i];
-  			let subtitle = ""
-	  		if ('price' in business && business.price != "") {
-	  			subtitle += business.price + " - "
+		  		let obj = {
+		  			"card": {
+		  				"title": business.name + " (" + business.rating + " stars)",
+			  			"subtitle": subtitle,
+			  			"imageUri": business.image_url,
+			  			"buttons": [{
+			  				"text": "View details",
+			  				"postback": business.url
+			  			}]
+		  			}
+		  		}
+
+		  		richResponses.push(obj);
 	  		}
-	  		if ('distance' in business && business.distance != "") {
-	  			subtitle += (business.distance / 1609.344).toPrecision(2) + " mi - "
-	  		}
-	  		subtitle += business.review_count + " reviews"
 
-	  		let obj = {
-	  			"card": {
-	  				"title": business.name + " (" + business.rating + " stars)",
-		  			"subtitle": subtitle,
-		  			"imageUri": business.image_url,
-		  			"buttons": [{
-		  				"text": "View details",
-		  				"postback": business.url
-		  			}]
-	  			}
-	  		}
-
-	  		richResponses.push(obj);
-  		}
-
-  		console.log("RICH RESPONSES START -----------------------");
-  		console.log(richResponses);
-  		console.log("RICH RESPONSES END -----------------------");
-
-  		return res.json({
-  			fulfillmentMessages: richResponses,
-  			source: 'discover'
-  		});
-  	}).catch(e => {
-  		console.log(e);
-  	});
-  }
+	  		return res.json({
+	  			fulfillmentMessages: richResponses
+	  		});
+	  	}).catch(e => {
+	  		console.log(e);
+	  	});
+	}
 });
-
