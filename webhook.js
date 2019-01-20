@@ -33,56 +33,6 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-/* Handling all messenges */
-// app.post('/webhook', (req, res) => {
-//   console.log(req.body);
-//   if (req.body.object === 'page') {
-//     req.body.entry.forEach((entry) => {
-//       entry.messaging.forEach((event) => {
-//         if (event.message && event.message.text) {
-//           sendMessage(event);
-//         }
-//       });
-//     });
-//     res.status(200).end();
-//   }
-// });
-
-// function sendMessage(event) {
-//   let sender = event.sender.id;
-//   let text = event.message.text;
-
-//   let apiai = apiaiApp.textRequest(text, {
-//     sessionId: 'poisson_cat'
-//   });
-
-//   apiai.on('response', (response) => {
-//     let aiText = response.result.fulfillment.speech;
-
-//     request({
-//       url: 'https://graph.facebook.com/v2.6/me/messages',
-//       qs: {access_token: PAGE_ACCESS_TOKEN},
-//       method: 'POST',
-//       json: {
-//         recipient: {id: sender},
-//         message: {text: aiText}
-//       }
-//     }, (error, response) => {
-//       if (error) {
-//           console.log('Error sending message: ', error);
-//       } else if (response.body.error) {
-//           console.log('Error: ', response.body.error);
-//       }
-//     });
-//   });
-
-//   apiai.on('error', (error) => {
-//     console.log(error);
-//   });
-
-//   apiai.end();
-// }
-
 var yelp_term = ""
 var yelp_num = ""
 
