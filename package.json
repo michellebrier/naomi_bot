@@ -15,5 +15,8 @@
     "express": "^4.16.4",
     "request": "^2.88.0",
     "yelp-fusion": "^2.2.1"
+  },
+  "engines": {
+    "node": "8.x"
   }
 }
